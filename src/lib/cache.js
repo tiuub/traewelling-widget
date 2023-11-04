@@ -1,7 +1,7 @@
 // Variables used by Scriptable.
 // These must be at the very top of the file. Do not edit.
 // icon-color: light-gray; icon-glyph: magic;
-class Cache {
+export default class Cache {
   constructor(name, expirationMinutes) {
     this.fm = FileManager.iCloud();
     this.cachePath = this.fm.joinPath(this.fm.documentsDirectory(), name);
@@ -49,5 +49,3 @@ class Cache {
     }
   }
 }
-
-module.exports = Cache;

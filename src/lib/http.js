@@ -1,7 +1,4 @@
-// Variables used by Scriptable.
-// These must be at the very top of the file. Do not edit.
-// icon-color: brown; icon-glyph: magic;
-module.exports.fetchJson = async (url, headers, cache, cacheKey, cacheExpiration) => {
+export async function fetchJson({ url, headers, cache, cacheKey, cacheExpiration }) {
   if (cache && cacheKey) {
     const cached = await cache.read(cacheKey, cacheExpiration);
     if (cached) {
