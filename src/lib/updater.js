@@ -61,7 +61,7 @@ export default class Updater {
   async updateScript(name) {
     const tag_name = await this.getLatestTagName()
     console.log(`Updating script to ${tag_name}!`)
-    const url = `https://github.com/${this.repo}/releases/download/${tag_name}/${name}.js`
+    const url = `https://github.com/${this.repo}/releases/download/${tag_name}/${name.replace(" ", ".")}.js`
     console.log(`Update url: ${url}`)
     const req = new Request(url);
     const content = await req.loadString();
