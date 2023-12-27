@@ -3,7 +3,7 @@
 [![GitHub All Releases](https://img.shields.io/github/downloads/tiuub/traewelling-widget/total)](https://github.com/tiuub/traewelling-widget/releases/latest)
 [![Issues](https://img.shields.io/github/issues/tiuub/traewelling-widget)](https://github.com/tiuub/traewelling-widget/issues)
 [![GitHub](https://img.shields.io/github/license/tiuub/traewelling-widget)](https://github.com/tiuub/traewelling-widget/blob/master/LICENSE)
-[![Donate](https://img.shields.io/badge/Donate-PayPal-green.svg)](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=5F5QB7744AD5G&source=url)
+![GitHub Sponsors](https://img.shields.io/github/sponsors/tiuub)
 
 
 Traewelling Widget is a iOS widget for [Scriptable](https://scriptable.app/), which shows some stats about your logged train rides on [Traewelling](https://traewelling.de).
@@ -35,7 +35,7 @@ Traewelling Widget is a iOS widget for [Scriptable](https://scriptable.app/), wh
 
 *(Hint: If you have configured a bigger timespan, f.e. more than 14 days in the past, the script might timeout a few times at first start. This should fix by itself. This happens due to iOS widget timeout limitations. It will work after the script has cached some statistics.)
 
-### Default Configuration
+## Configuration
 
 This is a bare minimum default configuration, you can use for your widget.
 The profile parameter is optional, but recommended. If not set, it will use **0** by default.
