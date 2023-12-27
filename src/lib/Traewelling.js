@@ -10,86 +10,86 @@ export class Traewelling {
         this.accesstokenFile = this.fileManager.joinPath(this.authorizationDir, "access_token.json");
         this.codeVerifierFile = this.fileManager.joinPath(this.authorizationDir, "code_verifier.json");
 
-        if (!this.fileManager.fileExists(this.authorizationDir)) {
-            this.fileManager.createDirectory(this.authorizationDir)
-          }
-
-        if (!this.fileManager.fileExists(this.accesstokenFile)) {
-            this.fileManager.downloadFileFromiCloud(this.accesstokenFile);
-        }
-        
-        if (!this.fileManager.fileExists(this.codeVerifierFile)) {
-            this.fileManager.downloadFileFromiCloud(this.codeVerifierFile);
-        }
-
         this.oauth2Client = settings.oauth2Client;
         this.redirectUri = settings.redirectUri;
         this.cache = settings.cache;
     }
 
-    readTokenFromFile() {
-        if (!this.fileManager.fileExists(this.accesstokenFile)) {
-            return undefined;
+    async readJsonFromFile(fileManager, file) {       
+        if (!fileManager.fileExists(file)) {
+          return undefined;
         }
-    
-        let contents = jsonUtil.loadFromFile(this.fileManager, this.accesstokenFile);
+        
+        await fileManager.downloadFileFromiCloud(file);
+
+        return jsonUtil.loadFromFile(fileManager, file);
+    }
+
+    async readTokenFromFile(fileManager, file) {
+        let contents = await this.readJsonFromFile(fileManager, file);
         
         return contents;
     }
 
-    writeTokenToFile(token) {
-        jsonUtil.writeToFile(this.fileManager, this.accesstokenFile, token);
+    async readCodeVerifierFromFile(fileManager, file) {
+        let contents = await this.readJsonFromFile(fileManager, file);
+
+        if (!contents) {
+            return undefined;
+        }
+
+        if (new Date(contents.date) < new Date() - (10 * 60 * 1000)) {
+            fileManager.remove(file);
+            return undefined;
+        }
+
+        return contents.codeVerifier;
     }
 
-    getToken() {
+    writeJsonToFile(fileManager, file, json) {
+        jsonUtil.writeToFile(fileManager, file, json);
+    }
+
+    writeTokenToFile(fileManager, file, token) {
+        this.writeJsonToFile(fileManager, file, token);
+    }
+
+    writeCodeVerifierToFile(fileManager, file, codeVerifier) {
+        let json = {"codeVerifier": codeVerifier, "date": new Date()};
+        this.writeJsonToFile(fileManager, file, json);
+    }
+
+    async getToken() {
         if (this.token) {
             return this.token;
         }
-        this.token = this.readTokenFromFile();
+        this.token = await this.readTokenFromFile(this.fileManager, this.accesstokenFile);
         return this.token
     }
 
     setToken(token) {
         this.token = token;
-        this.writeTokenToFile(token);
+        this.writeTokenToFile(this.fileManager, this.accesstokenFile, token);
     }
 
-    readCodeVerifierFromFile() {
-        if (!this.fileManager.fileExists(this.codeVerifierFile)) {
-          return undefined;
-        }
-        let contents = jsonUtil.loadFromFile(this.fileManager, this.codeVerifierFile);
-        if (new Date(contents.date) < new Date() - (10 * 60 * 1000)) {
-          return undefined;
-        }
-        
-        this.fileManager.remove(this.codeVerifierFile);
-
-        return contents.codeVerifier;
-    }
-
-    writeCodeVerifierToFile(codeVerifier) {
-        let json = {"codeVerifier": codeVerifier, "date": new Date()};
-        jsonUtil.writeToFile(this.fileManager, this.codeVerifierFile, json);
-    }
-
-    getCodeVerifier() {
+    async getCodeVerifier() {
         if (this.codeVerifier) {
             return this.codeVerifier;
         }
-        this.codeVerifier = this.readCodeVerifierFromFile();
+
+        this.codeVerifier = await this.readCodeVerifierFromFile(this.fileManager, this.codeVerifierFile);
         return this.codeVerifier;
     }
 
     setCodeVerifier(codeVerifier) {
         this.codeVerifier = codeVerifier;
-        this.writeCodeVerifierToFile(this.codeVerifier);
+        this.writeCodeVerifierToFile(this.fileManager, this.codeVerifierFile, codeVerifier);
     }
 
     async fetch(url, cacheExpiration=0) {
-        let token = this.getToken()
+        let token = await this.getToken()
 
-        if (!this.isTokenValid) {
+        if (!await this.isTokenValid()) {
             token = this.oauth2Client.refreshToken(token);
             this.setToken(token);
         }
@@ -109,25 +109,25 @@ export class Traewelling {
         return await req.loadJSON();
     }
 
-    isAuthenticated() {
-        if (!this.getToken()) {
+    async isAuthenticated() {
+        if (!await this.getToken()) {
             return false;
         }
         return true;
     }
 
-    isTokenValid() {
-        if (!this.isAuthenticated()) {
+    async isTokenValid() {
+        if (!await this.isAuthenticated()) {
             return false;
         }
-        if (this.getToken().exiresAt < new Date()) {
+        if ((await this.getToken()).exiresAt < new Date()) {
             return false;
         }
         return true;
     }
 
-    isAuthenticationProcessStarted() {
-        if (!this.getCodeVerifier()) {
+    async isAuthenticationProcessStarted() {
+        if (!await this.getCodeVerifier()) {
             return false;
         }
         return true;
@@ -145,7 +145,9 @@ export class Traewelling {
 
             scope: ['read-statistics'],
         });
+
         this.setCodeVerifier(codeVerifier);
+
         return authorizeUri;
     }
 
@@ -157,7 +159,7 @@ export class Traewelling {
         
               state: 'some-string',
         
-              codeVerifier: this.getCodeVerifier(),
+              codeVerifier: await this.getCodeVerifier(),
             }
         );
 
@@ -168,7 +170,7 @@ export class Traewelling {
         let token = await this.oauth2Client.authorizationCode.getToken({
             code: queryParameters.code,
             redirectUri: this.redirectUri,
-            codeVerifier: this.getCodeVerifier(),
+            codeVerifier: await this.getCodeVerifier(),
         });
 
         this.setToken(token);

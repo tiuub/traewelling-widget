@@ -163,8 +163,6 @@ async function main() {
   let dateString = getParameterFromDictOrDefault(inputDict, "date", DEFAULT_DATE_STRING);
   let schemes = getParameterFromDictOrDefault(inputDict, "schemes", DEFAULT_SCHEMES);
 
-  console.log(`Current profile: ${profile}`);
-
   // Transform dateString into days difference
   // If dateString is valid, it will override the days parameter
   if (isDateValid(dateString)) {
@@ -199,6 +197,8 @@ async function main() {
     }
   }
 
+  console.log(`Current profile: ${profile}`);
+
   let widgetParams = {
     profile: profile,
     days: days,
@@ -223,6 +223,11 @@ async function main() {
   // Authentication
   console.log("Starting authorization flow");
   let authorizationDir = FM.joinPath(PROFILEDIR, "authorization");
+
+  if (!FM.fileExists(authorizationDir)) {
+    FM.createDirectory(authorizationDir);
+  }
+
   const traewelling = new Traewelling({
     fileManager: FM,
     authorizationDir: authorizationDir,
@@ -237,20 +242,20 @@ async function main() {
     cache: apiCache,
   });
 
-  console.log(`Profile is authenticated: ${traewelling.isAuthenticated()}`);
-  console.log(`Authentication flow started: ${traewelling.isAuthenticationProcessStarted()}`);
+  console.log(`Profile is authenticated: ${await traewelling.isAuthenticated()}`);
+  console.log(`Authentication flow started: ${await traewelling.isAuthenticationProcessStarted()}`);
 
-  if (config.runsInWidget && !traewelling.isAuthenticated() && !traewelling.isAuthenticationProcessStarted()) {
+  if (config.runsInWidget && !await traewelling.isAuthenticated() && !await traewelling.isAuthenticationProcessStarted()) {
     Script.setWidget(await getErrorWidget("this profile is unauthenticated.\n\nPress the widget, to start the authentication flow."));
     Script.complete();
     return;
-  } else if (config.runsInWidget && !traewelling.isAuthenticated() && traewelling.isAuthenticationProcessStarted()) {
+  } else if (config.runsInWidget && !await traewelling.isAuthenticated() && await traewelling.isAuthenticationProcessStarted()) {
     Script.setWidget(await getErrorWidget("authentication flow already started.\n\nPlease wait until its finished!"));
     Script.complete();
     return;
   }
 
-  if (!traewelling.isAuthenticated() && !traewelling.isAuthenticationProcessStarted()) {
+  if (!await traewelling.isAuthenticated() && !queryParameters.code) {
     let authorizeUri = await traewelling.getAuthorizeUri();
     console.log(`AuthorizeUri: ${authorizeUri}`);
     console.log("Opening AuthorizeUri with Safari!");
@@ -272,11 +277,9 @@ async function main() {
     Safari.open(authorizeUri);
     Script.complete();
     return;
-  }
-
-  if (!traewelling.isAuthenticated() && traewelling.isAuthenticationProcessStarted() && queryParameters["code"]) {
+  }else if (!await traewelling.isAuthenticated() && await traewelling.isAuthenticationProcessStarted() && queryParameters.code) {
     await traewelling.fetchTokenFromQueryParameters(queryParameters);
-    if (traewelling.isAuthenticated()) {
+    if (await traewelling.isAuthenticated()) {
         let userinfo = await traewelling.getUserInfo();
         
         let alert = new Alert();
@@ -290,7 +293,7 @@ async function main() {
         Script.complete();
         return;
     }
-  } else if (!traewelling.isAuthenticated() && traewelling.isAuthenticationProcessStarted()) {
+  } else if (!await traewelling.isAuthenticated() && await traewelling.isAuthenticationProcessStarted()) {
     let alert = new Alert();
     alert.title = "Traewelling OIDC";
     alert.message = `The authentication flow was already started, but I received no code.\n\nTo restart the authentication flow, click on the widget!`;
