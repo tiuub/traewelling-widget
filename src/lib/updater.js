@@ -1,14 +1,9 @@
-// Variables used by Scriptable.
-// These must be at the very top of the file. Do not edit.
-// icon-color: deep-brown; icon-glyph: magic;
-import Cache from './cache';
-import * as http from './http';
 
 export default class Updater {
-  constructor(repo) {
-    this.repo = repo;
-    this.fm = FileManager.iCloud();
-    this.cache = new Cache(`UpdaterCache`, 15);
+  constructor(settings) {
+    this.repo = settings.repo;
+    this.fileManager = settings.fileManager;
+    this.cache = settings.cache;
   }
 
   async checkForUpdate(version) {
@@ -34,11 +29,10 @@ export default class Updater {
 
   async getLatestTagName() {
     const url = `https://api.github.com/repos/${this.repo}/releases`;
-    const data = await http.fetchJson({
-      url,
-      cache: this.cache,
-      cacheKey: `${this.repo.replace("/", "_")}Updater`,
-      cacheExpiration: 0
+    const data = await this.cache.fetchJson({
+      url: url,
+      cacheKey: url,
+      cacheExpiration: 12 * 60,
     });
 
     if (!data || data.length === 0) {
@@ -66,9 +60,9 @@ export default class Updater {
     const req = new Request(url);
     const content = await req.loadString();
 
-    const path = this.fm.joinPath(this.fm.documentsDirectory(), name + '.js');
+    const path = this.fileManager.joinPath(this.fileManager.documentsDirectory(), name + '.js');
 
-    this.fm.writeString(path, content);
+    this.fileManager.writeString(path, content);
   }
 
   // Method to compare two versions. 

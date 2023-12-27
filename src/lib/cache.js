@@ -1,31 +1,29 @@
-// Variables used by Scriptable.
-// These must be at the very top of the file. Do not edit.
-// icon-color: light-gray; icon-glyph: magic;
-export default class Cache {
-  constructor(name, expirationMinutes) {
-    this.fm = FileManager.iCloud();
-    this.cachePath = this.fm.joinPath(this.fm.documentsDirectory(), name);
-    this.expirationMinutes = expirationMinutes;
 
-    if (!this.fm.fileExists(this.cachePath)) {
-      this.fm.createDirectory(this.cachePath)
+export default class Cache {
+  constructor(settings) {
+    this.fileManager = settings.fileManager;
+    this.cachePath = settings.cachePath;
+
+    if (!this.fileManager.fileExists(this.cachePath)) {
+      this.fileManager.createDirectory(this.cachePath)
     }
   }
 
   async read(key, expirationMinutes) {
+    key = key.replace("https://", "").replace("http://", "").replace("www.", "").replaceAll('/', '_').replaceAll(':', '');
     try {
-      const path = this.fm.joinPath(this.cachePath, key);
-      await this.fm.downloadFileFromiCloud(path);
-      const createdAt = this.fm.creationDate(path);
+      const path = this.fileManager.joinPath(this.cachePath, key);
+      await this.fileManager.downloadFileFromiCloud(path);
+      const createdAt = this.fileManager.creationDate(path);
       
-      if (expirationMinutes || this.expirationMinutes) {
-        if ((new Date()) - createdAt > ((expirationMinutes || this.expirationMinutes) * 60000)) {
-          this.fm.remove(path);
+      if (expirationMinutes) {
+        if ((new Date()) - createdAt > ((expirationMinutes) * 60000)) {
+          this.fileManager.remove(path);
           return null;
         }
       }
       
-      const value = this.fm.readString(path);
+      const value = this.fileManager.readString(path);
     
       try {
         console.log(`Reading from cache...`);
@@ -39,13 +37,38 @@ export default class Cache {
   };
 
   write(key, value) {
-    const path = this.fm.joinPath(this.cachePath, key.replace('/', '-'));
+    key = key.replace("https://", "").replace("http://", "").replace("www.", "").replaceAll('/', '_').replaceAll(':', '');
+    const path = this.fileManager.joinPath(this.cachePath, key);
     console.log(`Caching to ${path}...`);
 
     if (typeof value === 'string' || value instanceof String) {
-      this.fm.writeString(path, value);
+      this.fileManager.writeString(path, value);
     } else {
-      this.fm.writeString(path, JSON.stringify(value));
+      this.fileManager.writeString(path, JSON.stringify(value));
+    }
+  }
+
+  async fetchJson({ url, headers, cacheKey, cacheExpiration }) {
+    if (cacheKey) {
+      const cached = await this.read(cacheKey, cacheExpiration);
+      if (cached) {
+        return cached;
+      }
+    }
+  
+    try {
+      console.log(`Fetching url: ${url}`);
+      const req = new Request(url);
+      if (headers) {
+        req.headers = headers;
+      }
+      const resp = await req.loadJSON();
+      if (cacheKey) {
+        this.write(cacheKey, resp);
+      }
+      return resp;
+    } catch (error) {
+      console.log(error);
     }
   }
 }
