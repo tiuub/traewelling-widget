@@ -27,12 +27,12 @@ export default class Updater {
     return version;
   }
 
-  async getLatestTagName() {
+  async getLatestTagName(cacheExpiration = 6*60) {
     const url = `https://api.github.com/repos/${this.repo}/releases`;
     const data = await this.cache.fetchJson({
       url: url,
       cacheKey: url,
-      cacheExpiration: 12 * 60,
+      cacheExpiration: cacheExpiration,
     });
 
     if (!data || data.length === 0) {
