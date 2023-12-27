@@ -116,18 +116,29 @@ async function main() {
   // Update script
 
   if (areRepoUpdatesAvailable && config.runsInApp) {
-    let inputAlert = new Alert();
-    inputAlert.title = "Traewelling Widget Update";
-    inputAlert.message = "There is an update for Traewelling Widget.\n\nDo you want to install it?";
+    let alert = new Alert();
+    alert.title = "Traewelling Widget Update";
+    alert.message = "There is an update for Traewelling Widget.\n\nDo you want to install it?";
 
-    inputAlert.addAction("No");
-    inputAlert.addAction("Yes");
+    alert.addAction("No");
+    alert.addAction("Yes");
 
-    let buttonIndex = await inputAlert.present();
+    let buttonIndex = await alert.present();
 
     if (buttonIndex === 1) {
       try {
         await updater.updateScript(scriptName);
+
+        let alert = new Alert();
+        alert.title = "Traewelling Widget Update";
+        alert.message = `You sucessfully updated Traewelling Widget!\n\nPlease rerun the script now!`;
+
+        alert.addAction("OK");
+
+        await alert.present();
+
+        Script.complete();
+        return;
       } catch (error) {
         console.log(`${error.line}: ${error.message}`);
       }
