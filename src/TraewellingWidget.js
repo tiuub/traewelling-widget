@@ -115,11 +115,22 @@ async function main() {
 
   // Update script
 
-  if (areRepoUpdatesAvailable) {
-    try {
-      await updater.updateScript(scriptName);
-    } catch (error) {
-      console.log(`${error.line}: ${error.message}`);
+  if (areRepoUpdatesAvailable && config.runsInApp) {
+    let inputAlert = new Alert();
+    inputAlert.title = "Traewelling Widget Update";
+    inputAlert.message = "There is an update for Traewelling Widget.\n\nDo you want to install it?";
+
+    inputAlert.addAction("No");
+    inputAlert.addAction("Yes");
+
+    let buttonIndex = await inputAlert.present();
+
+    if (buttonIndex === 1) {
+      try {
+        await updater.updateScript(scriptName);
+      } catch (error) {
+        console.log(`${error.line}: ${error.message}`);
+      }
     }
   }
 
@@ -307,9 +318,7 @@ async function main() {
 
 async function createWidget(traewelling, widgetParams) {
   let widget = generateBaseWidget();
-  if (widgetParams.areRepoUpdatesAvailable) {
-    widget.url = sourceRepoUrl;
-  } else {
+  if (!widgetParams.areRepoUpdatesAvailable) {
     let userinfo = await traewelling.getUserInfo();
     widget.url = `https://traewelling.de/@${userinfo.data.username}`;
   }
@@ -340,7 +349,7 @@ async function createWidget(traewelling, widgetParams) {
   }
   
   if (widgetParams.areRepoUpdatesAvailable)
-    subtitle = "update available";
+    subtitle = "click to update";
   
   let widgetFamily = config.widgetFamily;
   if (widgetFamily === undefined) {
