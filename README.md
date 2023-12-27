@@ -32,7 +32,7 @@ Traewelling Widget is a iOS widget for [Scriptable](https://scriptable.app/), wh
 - When the Scriptable App opens again, enter your profile and confirm with **Ok**
 - You should be authenticated now
 
-*(Hint: If you have configured a bigger timespan, f.e. more than 14 days in the past, the script might timeout a few times at first start. This should fix by itself. This happens due to iOS widget timeout limitations. It will work after the script has cached some statistics.)
+*(Hint: If you have configured a bigger timespan, f.e. more than 14 days in the past, the script might timeout a few times at first start. This should fix by itself. This happens due to iOS widget timeout limitations. It will work after the script has cached some statistics.)*
 
 ## Configuration
 
