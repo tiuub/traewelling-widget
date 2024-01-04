@@ -133,13 +133,13 @@ export class Traewelling {
         return true;
     }
 
-    async getAuthorizeUri() {
+    async getAuthorizeUri(state) {
         const codeVerifier = await generateCodeVerifier();
 
         let authorizeUri = await this.oauth2Client.authorizationCode.getAuthorizeUri({
             redirectUri: this.redirectUri,
 
-            state: 'some-string',
+            state: state,
 
             codeVerifier,
 

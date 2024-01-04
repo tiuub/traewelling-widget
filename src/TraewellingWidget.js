@@ -9,6 +9,7 @@ import Cache from './lib/cache';
 import Updater from './lib/updater';
 import { OAuth2Client } from './lib/customOauth';
 import { Traewelling } from './lib/Traewelling';
+import States from './lib/states'
 
 import Package from '../package.json';
 const scriptVersion = Package.version;
@@ -40,7 +41,7 @@ const DEFAULT_SCHEMES = {
     [[["title", "noSpacer", "subtitle", "spacer", "distance", "spacer", "categoryExpress", "categoryRegional", "categoryUrban"]]]], 
   "large": [
     [
-      [["title", "noSpacer", "subtitle", "spacer", "distance", "spacer", "duration", "stations", "delay"], ["moreStats", "minSpeed", "avgSpeed", "maxSpeed", "spacer", "purposePersonal", "purposeCommute", "purposeBusiness", "spacer", "favouriteStation"]], 
+      [["title", "noSpacer", "subtitle", "spacer", "distance", "spacer", "duration", "stations", "delay"], ["moreStats", "purposePersonal", "purposeCommute", "purposeBusiness", "spacer", "avgSpeed", "maxSpeed", "spacer", "favouriteStation", "favouriteConnection"]], 
       [["latestTrips"]]
     ], 
     [
@@ -127,11 +128,12 @@ async function main() {
 
     if (buttonIndex === 1) {
       try {
+        console.log("Updating script...");
         await updater.updateScript(scriptName);
 
         let alert = new Alert();
         alert.title = "Traewelling Widget Update";
-        alert.message = `You sucessfully updated Traewelling Widget!\n\nPlease rerun the script now!`;
+        alert.message = `You sucessfully updated Traewelling Widget!\n\nPlease restart the script!`;
 
         alert.addAction("OK");
 
@@ -158,7 +160,7 @@ async function main() {
     console.log("No widget parmaeters given!");
   }
 
-  let profile = getParameterFromDictOrDefault(inputDict, "profile", DEFAULT_PROFILE);
+  let profile = getParameterFromDictOrDefault(inputDict, "profile", undefined);
   let days = getParameterFromDictOrDefault(inputDict, "days", DEFAULT_DAYS);
   let dateString = getParameterFromDictOrDefault(inputDict, "date", DEFAULT_DATE_STRING);
   let schemes = getParameterFromDictOrDefault(inputDict, "schemes", DEFAULT_SCHEMES);
@@ -174,12 +176,30 @@ async function main() {
     days = diffInDays;
   }
 
-  if (config.runsInApp && !inputDict.profile) {
+  const states = new States({
+    fileManager: FM,
+    workingDir: WORKINGDIR
+  });
+
+  // Get profile from state
+  if (config.runsInApp && !profile && queryParameters.code && queryParameters.state) {
+    console.log("Trying to receive profile from state in authentication flow.");
+    let state = queryParameters.state;
+    profile = await states.getProfileFromState(state);
+
+    if (!profile) {
+      console.log("Couldnt receive profile from state!");
+    }
+  }
+
+  // Manually enter profile
+  if (config.runsInApp && !profile) {
+    console.log("Trying to receive profile by manual input.");
     let inputAlert = new Alert();
     inputAlert.title = "Traewelling Profile";
     inputAlert.message = "Enter your profile:\n\n(Hint: if you havent configured a profile in widget parameters on homescreen, you dont have to here as well.)";
 
-    inputAlert.addTextField(profile);
+    inputAlert.addTextField(DEFAULT_PROFILE);
 
     inputAlert.addAction("Cancel");
     inputAlert.addAction("OK");
@@ -195,6 +215,11 @@ async function main() {
     if (inputValue && inputValue !== "" && inputValue !== profile) {
       profile = inputValue;
     }
+  }
+
+  // Set profile to default
+  if (!profile) {
+    profile = DEFAULT_PROFILE;
   }
 
   console.log(`Current profile: ${profile}`);
@@ -245,18 +270,25 @@ async function main() {
   console.log(`Profile is authenticated: ${await traewelling.isAuthenticated()}`);
   console.log(`Authentication flow started: ${await traewelling.isAuthenticationProcessStarted()}`);
 
-  if (config.runsInWidget && !await traewelling.isAuthenticated() && !await traewelling.isAuthenticationProcessStarted()) {
+  if (config.runsInWidget && !await traewelling.isAuthenticated() && areRepoUpdatesAvailable) {
+    Script.setWidget(await getErrorWidget("there is an update for the widget.\n\nClick on the widget, to update it."));
+    Script.complete();
+    return;
+  } else if (config.runsInWidget && !await traewelling.isAuthenticated() && !await traewelling.isAuthenticationProcessStarted()) {
     Script.setWidget(await getErrorWidget("this profile is unauthenticated.\n\nPress the widget, to start the authentication flow."));
     Script.complete();
     return;
   } else if (config.runsInWidget && !await traewelling.isAuthenticated() && await traewelling.isAuthenticationProcessStarted()) {
-    Script.setWidget(await getErrorWidget("authentication flow already started.\n\nPlease wait until its finished!"));
+    Script.setWidget(await getErrorWidget("authentication flow already started.\n\nClick on the widget, to restart the authentication flow!"));
     Script.complete();
     return;
   }
 
   if (!await traewelling.isAuthenticated() && !queryParameters.code) {
-    let authorizeUri = await traewelling.getAuthorizeUri();
+    let state = states.generateState();
+    console.log(`State: ${state}`);
+    await states.setStateForProfile(profile, state);
+    let authorizeUri = await traewelling.getAuthorizeUri(state);
     console.log(`AuthorizeUri: ${authorizeUri}`);
     console.log("Opening AuthorizeUri with Safari!");
 
@@ -284,7 +316,7 @@ async function main() {
         
         let alert = new Alert();
         alert.title = "Traewelling OIDC";
-        alert.message = `You sucessfully logged in to user ${userinfo.data.displayName}!\n\nYour widget should refresh by itself in a few minutes!`;
+        alert.message = `You sucessfully logged in to user ${userinfo.data.displayName} with local profile ${profile}!\n\nYour widget should refresh by itself in a few minutes!`;
 
         alert.addAction("OK");
 
@@ -353,15 +385,18 @@ async function createWidget(traewelling, widgetParams) {
   console.log("Received daily statistics");
 
   if (data === undefined) {    
-    return await getErrorWidget("dataset could not be loaded!", "Sometimes widget times out, this can happen, if you want to get a big timespan. If so, this will fix by itself.");
+    return await getErrorWidget("dataset could not be completely loaded!", "Sometimes widget times out. This may happen, if you have set a big timespan. If so, this will fix by itself.");
   }
   
+  console.log(`Received stats of ${Object.keys(data).length} days`);
   let trips = [];
-  
-  for (const [date, value] of Object.entries(data)) {
-    trips.push(...value["statuses"]);
+  if (Object.keys(data).length > 0) {
+    for (const value of Object.values(data)) {
+      trips.push(...value.statuses);
+    }
   }
-  
+  console.log(`Loaded trips: ${trips.length}`);
+
   if (widgetParams.areRepoUpdatesAvailable)
     subtitle = "click to update";
   
@@ -423,7 +458,7 @@ async function createWidget(traewelling, widgetParams) {
             entryLower = entry.name.toLowerCase();
             entryArgs = entry.args;
           }
-                
+          console.log(`Current scheme object: ${entryLower}`);
           if (noSpacerOnNext || entryLower.endsWith("spacer")) {
             noSpacerOnNext = false;
           } else {
@@ -447,19 +482,21 @@ async function createWidget(traewelling, widgetParams) {
           } else if (entryLower === "subtitle") {
             await addSubtitle(column, subtitle);
           } else if (entryLower === "distance") {
-            await addTrainDistance(column, data);
+            await addTrainDistance(column, trips);
           } else if (entryLower === "duration") {
-            await addTrainDuration(column, data);
+            await addTrainDuration(column, trips);
           } else if (entryLower === "stations") {
-            await addStationsCount(column, data);
+            await addStationsCount(column, trips);
           } else if (entryLower === "favouritestation") {
-            await addFavouriteStation(column, data);
+            await addFavouriteStation(column, trips);
+          } else if (entryLower === "favouriteconnection") {
+            await addFavouriteConnection(column, trips);
           } else if (entryLower === "delay") {
-            await addTrainDelay(column, data);
+            await addTrainDelay(column, trips);
           } else if (entryLower === "minspeed") {
-            await addTrainMinSpeed(column, data);
+            await addTrainMinSpeed(column, trips);
           } else if (entryLower === "maxspeed") {
-            await addTrainMaxSpeed(column, data);
+            await addTrainMaxSpeed(column, trips);
           } else if (entryLower === "avgspeed") {
             await addTrainAvgSpeed(column, trips);
           } else if (entryLower === "weekdaysunday") {
@@ -547,215 +584,223 @@ async function addSubtitle(widget, subtitle) {
   return widget;
 }
 
-async function addTrainDistance(widget, data) {
-  let totalDistances = {};
+async function addSingleBoldStatistic(widget, text, subtext) {
+  let t_singlebold = widget.addText(text);
+  t_singlebold.font = Font.boldSystemFont(18);
+  t_singlebold.textColor = Color.white();
   
-  for (const [date, value] of Object.entries(data)) {
-    totalDistances[date] = value["totalDistance"];
-  }
+  let t_singlebold_sub = widget.addText(subtext);
+  t_singlebold_sub.font = Font.boldSystemFont(12);
+  t_singlebold_sub.textColor  = Color.white();
 
-  let trainDistance = sum(Object.values(totalDistances));
-  let trainDistanceInKm = trainDistance / 1000;
-  
-  let t_distance = widget.addText(`${numberWithCommas(trainDistanceInKm, 0)} km`);
-  t_distance.font = Font.boldSystemFont(18);
-  t_distance.textColor = Color.white();
-  
-  let t1_distance = widget.addText("total distance");
-  t1_distance.font = Font.boldSystemFont(12);
-  t1_distance.textColor  = Color.white();
+  return widget;
+}
+
+async function addSingleStatistic(widget, text) {
+  let t_single = widget.addText(text);
+  t_single.font = Font.regularSystemFont(12);
+  t_single.textColor = Color.white();
   
   return widget;
 }
 
-async function addTrainDuration(widget, data) {
-  let totalDurations = {};
+async function summarizeTripsParameter(trips, selector) {
+  let data = [];
   
-  for (const [date, value] of Object.entries(data)) {
-    totalDurations[date] = value["totalDuration"];
+  for (let i = 0; i < trips.length; i++) {
+    let trip = trips[i];
+    let selectedVal = selector(trip);
+    data.push(selectedVal);
   }
-  
-  let trainDuration = sum(Object.values(totalDurations));
-  
-  let trainDurationHoursMinutes = toHoursAndMinutes(trainDuration);
-  let trainDurationHours = trainDurationHoursMinutes["hours"];
-  let trainDurationMinutes = trainDurationHoursMinutes["minutes"];
-  
-  let t_duration = widget.addText(`⏱️ ${trainDurationHours}h ${trainDurationMinutes}min`);
-  t_duration.font = Font.regularSystemFont(12);
-  t_duration.textColor = Color.white();
-  
-  return widget;
+
+  return sum(data);
 }
 
-async function addStationsCount(widget, data) {
-  let trainstations = [];
+async function countTripsUniqueParameter(trips, selector) {
+  let data = await countTripsParameter(trips, selector);
+  return Object.keys(data).length;
+}
+
+async function countTripsParameter(trips, selector) {
+  let data = [];
   
-  for (const [date, value] of Object.entries(data)) {
-    for (const status of value["statuses"]) {
-      let train = status["train"];
-      let origin = train["origin"];
-      let destination = train["destination"];
-        
-      let originEva = origin["evaIdentifier"];
-      let destinationEva = destination["evaIdentifier"];
-        
-      if (!trainstations.includes(originEva)) {
-        trainstations.push(originEva);
-      }
-      
-      if (!trainstations.includes(destinationEva)) {
-        trainstations.push(destinationEva);
-      }
+  for (let i = 0; i < trips.length; i++) {
+    let trip = trips[i];
+    let selectedVal = selector(trip);
+    data.push(selectedVal);
+  }
+  
+  let counts = {};
+
+  for (let key of data) {
+    counts[key] = counts[key] ? counts[key] + 1 : 1;
+  }
+
+  let arrayOfKeyValuePairs = Object.entries(counts);
+  arrayOfKeyValuePairs.sort((a, b) => b[1] - a[1]);
+  let sortedCounts = Object.fromEntries(arrayOfKeyValuePairs);
+
+  return sortedCounts;
+}
+
+async function avgTripsParameter(trips, selector) {
+  let data = [];
+  
+  for (let i = 0; i < trips.length; i++) {
+    let trip = trips[i];
+    let selectedVal = selector(trip);
+    data.push(selectedVal);
+  }
+
+  let average = avg(data);
+  
+  return average || 0;
+}
+
+async function percentageByDurationTripsParameter(trips, selector) {
+  let data = {};
+  
+  for (let i = 0; i < trips.length; i++) {
+    let trip = trips[i];
+    let duration = trip.train.duration;
+    let seletedVal = selector(trip);
+    
+    if (!(seletedVal in data)) {
+      data[seletedVal] = duration;
+    } else {
+      data[seletedVal] += duration;
     }
   }
   
-  let t_trainstations = widget.addText(`🏫 ${trainstations.length} stations`);
-  t_trainstations.font = Font.regularSystemFont(12);
-  t_trainstations.textColor = Color.white();
-  
-  return widget;
-}
+  let total = 0;
+  for (var i in data) { 
+      total += data[i];
+  }
 
-async function addFavouriteStation(widget, data) {
-  let stationCount = {};
-  let evaToNames = {};
-  
-  for (const [date, value] of Object.entries(data)) {
-    for (const status of value["statuses"]) {
-      let train = status["train"];
-      let origin = train["origin"];
-      let destination = train["destination"];
-        
-      let originEva = origin["evaIdentifier"];
-      let originName = origin["name"];
-      let destinationEva = destination["evaIdentifier"];
-      let destinationName = destination["name"];
-        
-      if (!(originEva in stationCount)) {
-        evaToNames[originEva] = originName;
-        stationCount[originEva] = 1;
-      }else{
-        stationCount[originEva] += 1;
-      }
-      
-      if (!(destinationEva in stationCount)) {
-        evaToNames[destinationEva] = destinationName;
-        stationCount[destinationEva] = 1;
-      }else{
-        stationCount[destinationEva] += 1;
-      }
-    }
+  let percentages = {};
+  for (var k in data) {
+    percentages[k] = (data[k] / total * 100);
   }
   
-  let highestEva = Object.keys(stationCount).reduce(function(a, b){ return stationCount[a] > stationCount[b] ? a : b });
-
-  let t_favouritestation = widget.addText(`⭐️ ${evaToNames[highestEva]} (${stationCount[highestEva]})`);
-  t_favouritestation.font = Font.regularSystemFont(12);
-  t_favouritestation.textColor = Color.white();
-  
-  return widget;
+  return percentages;
 }
 
-async function addTrainDelay(widget, data) {
-  let delays = {};
-  
-  for (const [date, value] of Object.entries(data)) {
-    for (const status of value["statuses"]) {
-      let train = status["train"];
-      
-      let arrivalPlanned = new Date(train["destination"]["arrivalPlanned"]);
-      let arrivalRealString = train["destination"]["arrivalReal"];
-      let overriddenArrivalString = train["overriddenArrival"];
-        
-      if (overriddenArrivalString !== null) {
-        let overriddenArrival = new Date(overriddenArrivalString);
-        delays[date] = (overriddenArrival - arrivalPlanned) / 60000;
-      } else if (arrivalRealString !== null) {
-        let arrivalReal = new Date(arrivalRealString);
-        delays[date] = (arrivalReal - arrivalPlanned) / 60000;
-      }
-    }
-  }
-  
-  let trainDelay = sum(Object.values(delays));
-  
-  let trainDelayHoursMinutes = toHoursAndMinutes(trainDelay);
-  let trainDelayHours = trainDelayHoursMinutes["hours"];
-  let trainDelayMinutes = trainDelayHoursMinutes["minutes"];
-  
-  let t_delay = widget.addText(`⏳ ${trainDelayHours}h ${trainDelayMinutes}min delay`);
-  t_delay.font = Font.regularSystemFont(12);
-  t_delay.textColor = Color.white();
-  
-  return widget;
-}
-
-async function addTrainMinSpeed(widget, data) {
-  return addTrainMinMaxSpeed(widget, data, false);
-}
-
-async function addTrainMaxSpeed(widget, data) {
-  return addTrainMinMaxSpeed(widget, data, true);
-}
-
-async function addTrainMinMaxSpeed(widget, data, max=true) {
-  let maxSpeed = 0;
-  let minSpeed = 999999;
-  
-  for (const [date, value] of Object.entries(data)) {
-    for (const status of value["statuses"]) {
-        let train = status["train"];
-        let speed = train["speed"];
-        
-        if (speed < minSpeed) {
-          minSpeed = speed;
-        }
-        
-        if (speed > maxSpeed && speed < MAX_SPEED) {
-          maxSpeed = speed;
-        }
-    }
-  }
-  
-  let t_minmaxspeed = undefined
-  if (max) {
-    t_minmaxspeed = widget.addText(`🚄 ${numberWithCommas(maxSpeed, 0)} km/h (max)`);
+async function sortTripsBySelector(trips, selector, ascending=true) {
+  if (ascending) {
+    trips.sort((a, b) => selector(a) - selector(b));
   } else {
-    t_minmaxspeed = widget.addText(`🚄 ${numberWithCommas(minSpeed, 0)} km/h (min)`);
+    trips.sort((a, b) => selector(b) - selector(a));
   }
+  return trips;
+}
+
+async function addTrainDistance(widget, trips) {
+  let selector = trip => trip.train.distance;
+  let trainDistance = await summarizeTripsParameter(trips, selector);
+  let trainDistanceInKm = trainDistance / 1000;
+
+  widget = await addSingleBoldStatistic(widget, `${numberWithCommas(trainDistanceInKm, 0)} km`, "total distance");
+
+  return widget;
+}
+
+async function addTrainDuration(widget, trips) {
+  let selector = trip => trip.train.duration;
+  let totalDuration = await summarizeTripsParameter(trips, selector);
+  let totalDurationHoursMinutes = toHoursAndMinutes(totalDuration);
+
+  widget = await addSingleStatistic(widget, `⏱️ ${totalDurationHoursMinutes.hours}h ${totalDurationHoursMinutes.minutes}min`);
+
+  return widget;
+}
+
+async function addStationsCount(widget, trips) {
+  let selector = trip => (trip.train.origin.evaIdentifier, trip.train.destination.evaIdentifier);
+  let stationsCount = await countTripsUniqueParameter(trips, selector);
+  widget = await addSingleStatistic(widget, `🏫 ${stationsCount} stations`);
   
-  t_minmaxspeed.font = Font.regularSystemFont(12);
-  t_minmaxspeed.textColor = Color.white();
+  return widget;
+}
+
+async function addFavouriteStation(widget, trips) {
+  let selector = trip => (trip.train.origin.name, trip.train.destination.name);
+  let stationsCounts = await countTripsParameter(trips, selector);
+  widget = await addSingleStatistic(widget, `⭐️ ${Object.keys(stationsCounts)[0] || "None"} (${Object.values(stationsCounts)[0] || 0})`);
+
+  return widget;
+}
+
+async function addFavouriteConnection(widget, trips) {
+  let selector = trip => trip.train.lineName;
+  let connectionsCounts = await countTripsParameter(trips, selector);
+  widget = await addSingleStatistic(widget, `⭐️ ${Object.keys(connectionsCounts)[0] || "None"} (${Object.values(connectionsCounts)[0] || 0})`);
+
+  return widget;
+}
+
+async function addTrainDelay(widget, trips) {
+  let selector = trip => (new Date(trip.train.destination.arrival) - new Date(trip.train.destination.arrivalPlanned));
+  let totalDelayInMs = await summarizeTripsParameter(trips, selector);
+  let totalDelay = totalDelayInMs / 60000;
+  let totalDelayHoursMinutes = toHoursAndMinutes(totalDelay);
+
+  widget = await addSingleStatistic(widget, `⏳ ${totalDelayHoursMinutes.hours}h ${totalDelayHoursMinutes.minutes}min delay`);
+  
+  return widget;
+}
+
+async function addTrainMinSpeed(widget, trips) {
+  let selector = trip => calculateSpeedByMetersAndMinutes(trip.train.distance, trip.train.duration);
+  trips = await sortTripsBySelector(trips, selector);
+  let trip = trips[0];
+  let minSpeed = 0;
+
+  if (trip) {
+    minSpeed = numberWithCommas(calculateSpeedByMetersAndMinutes(trip.train.distance, trip.train.duration), 0);
+  }
+
+  widget = await addSingleStatistic(widget, `🚄 ${minSpeed} km/h (min)`);
+  
+  return widget;
+}
+
+async function addTrainMaxSpeed(widget, trips) {
+  let selector = trip => calculateSpeedByMetersAndMinutes(trip.train.distance, trip.train.duration);
+  trips = await sortTripsBySelector(trips, selector, false);
+  let trip = trips[0];
+  let maxSpeed = 0;
+  
+  if (trip) {
+    maxSpeed = numberWithCommas(calculateSpeedByMetersAndMinutes(trip.train.distance, trip.train.duration), 0);
+  }
+
+  widget = await addSingleStatistic(widget, `🚄 ${maxSpeed} km/h (max)`);
   
   return widget;
 }
 
 async function addTrainAvgSpeed(widget, trips) {
-  let displayFunc = function(average) {
-    return `🚄 ${numberWithCommas(average, 0)} km/h (avg)`;
-  };
-
   let selector = trip => calculateSpeedByMetersAndMinutes(trip.train.distance, trip.train.duration);
-  await addAverage(widget, trips, selector, displayFunc);
+  let average = await avgTripsParameter(trips, selector);
+  widget = await addSingleStatistic(widget, `🚄 ${numberWithCommas(average, 0)} km/h (avg)`)
+
+  return widget;
 }
 
 async function addTripWeekday(widget, trips, weekday=0) { // 0 = Sunday, 1 = Monday and so on
-  let displayFunc = function(percentages) {
-    return `${weekday_emoji(weekday)} ${numberWithCommas(percentages[weekday] || 0, 0)}% ${weekday_name(weekday)}`;
-  };
-
   let selector = trip => new Date(trip.train.origin.departure).getDay();
-  await addPercentageByDuration(widget, trips, selector, displayFunc);
+  let percentages = await percentageByDurationTripsParameter(trips, selector);
+  widget = await addSingleStatistic(widget, `${weekday_emoji(weekday)} ${numberWithCommas(percentages[weekday] || 0, 0)}% ${weekday_name(weekday)}`);
+
+  return widget;
 }
 
 async function addTripPurpose(widget, trips, purpose=0) {
-  let displayFunc = function(percentages) {
-    return `${purpose_emoji(purpose)} ${numberWithCommas(percentages[purpose] || 0, 0)}% ${purpose_name(purpose)}`;
-  };
-
   let selector = trip => trip.business;
-  await addPercentageByDuration(widget, trips, selector, displayFunc);
+  let percentages = await percentageByDurationTripsParameter(trips, selector);
+  widget = await addSingleStatistic(widget, `${purpose_emoji(purpose)} ${numberWithCommas(percentages[purpose] || 0, 0)}% ${purpose_name(purpose)}`);
+
+  return widget;
 }
 
 // categories: express, regional, urban
@@ -774,19 +819,18 @@ async function addTrainCategory(widget, trips, category="express") {
 
   let categoryEmoji = categoryEmojies[category];
   
-  let displayFunc = function(percentages) {
-    let percentage = categories[category].reduce((total, c) => (percentages[c] || 0) + total, 0);
-    return `${categoryEmoji} ${numberWithCommas(percentage || 0, 0)}% ${category}`;
-  };
-  
   let selector = trip => trip.train.category;
-  await addPercentageByDuration(widget, trips, selector, displayFunc);
+  let percentages = await percentageByDurationTripsParameter(trips, selector);
+  let percentage = categories[category].reduce((total, c) => (percentages[c] || 0) + total, 0);
+  widget = await addSingleStatistic(widget, `${categoryEmoji} ${numberWithCommas(percentage || 0, 0)}% ${category}`);
+
+  return widget;
 }
 
 async function addLatestTrips(widget, trips, maxTrips=7) {
   trips.sort((a, b) => b.train.origin.departure - a.train.origin.departure);
   
-  await addRecordTrips(widget, "Latest Trips", trips, maxTrips);
+  await addTripsList(widget, "Latest Trips", trips, maxTrips);
 }
 
 async function addFastestTrips(widget, trips, maxTrips=7) {
@@ -798,7 +842,7 @@ async function addFastestTrips(widget, trips, maxTrips=7) {
     return `(${numberWithCommas(calculateSpeedByMetersAndMinutes(trip.train.distance, trip.train.duration), 0)} km/h)`;
   };
   
-  await addRecordTrips(widget, "Fastest Trips", trips, maxTrips, displayFunc);
+  await addTripsList(widget, "Fastest Trips", trips, maxTrips, displayFunc);
 }
 
 async function addSlowestTrips(widget, trips, maxTrips=7) {
@@ -808,19 +852,19 @@ async function addSlowestTrips(widget, trips, maxTrips=7) {
     return `(${numberWithCommas(trip.train.speed, 0)} km/h)`;
   };
   
-  await addRecordTrips(widget, "Slowest Trips", trips, maxTrips, displayFunc);
+  await addTripsList(widget, "Slowest Trips", trips, maxTrips, displayFunc);
 }
 
 async function addLongestTrips(widget, trips, maxTrips=7) {
   trips.sort((a, b) => b.train.distance - a.train.distance);
   
-  await addRecordTrips(widget, "Longest Trips", trips, maxTrips);
+  await addTripsList(widget, "Longest Trips", trips, maxTrips);
 }
 
 async function addShortestTrips(widget, trips, maxTrips=7) {
   trips.sort((a, b) => a.train.distance - b.train.distance);
   
-  await addRecordTrips(widget, "Shortest Trips", trips, maxTrips);
+  await addTripsList(widget, "Shortest Trips", trips, maxTrips);
 }
 
 async function addLongestTimeTrips(widget, trips, maxTrips=7) {
@@ -830,7 +874,7 @@ async function addLongestTimeTrips(widget, trips, maxTrips=7) {
     return `(${minutesToHoursMinutesString(trip.train.duration)})`;
   };
   
-  await addRecordTrips(widget, "Longest Time Trips", trips, maxTrips, displayFunc);
+  await addTripsList(widget, "Longest Time Trips", trips, maxTrips, displayFunc);
 }
 
 async function addShortestTimeTrips(widget, trips, maxTrips=7) {
@@ -840,7 +884,7 @@ async function addShortestTimeTrips(widget, trips, maxTrips=7) {
     return `(${minutesToHoursMinutesString(trip.train.duration)})`; 
   };
   
-  await addRecordTrips(widget, "Shortest Time Trips", trips, maxTrips, displayFunc);
+  await addTripsList(widget, "Shortest Time Trips", trips, maxTrips, displayFunc);
 }
 
 async function addHighestDelayTrips(widget, trips, maxTrips=7) {
@@ -850,83 +894,11 @@ async function addHighestDelayTrips(widget, trips, maxTrips=7) {
     return `(${minutesToHoursMinutesString((new Date(trip.train.destination.arrivalReal) - new Date(trip.train.destination.arrivalPlanned)) / 60000)})`;
   };
   
-  await addRecordTrips(widget, "Highest Delay Trips", trips, maxTrips, displayFunc);
+  await addTripsList(widget, "Highest Delay Trips", trips, maxTrips, displayFunc);
 }
 
 // Base functions
-async function addFavourite(widget, trips, selector, displayFunc) {
-  let data = {};
-  
-  for (let i = 0; i < trips.length; i++) {
-    let trip = trips[i];
-    let seletedVal = selector(trip);
-    
-    if (!(seletedVal in data)) {
-      data[seletedVal] = 1;
-    } else {
-      data[seletedVal] += 1;
-    }
-  }
-  
-  
-  let t_purpose = widget.addText(displayFunc(percentages));
-  t_purpose.font = Font.regularSystemFont(12);
-  t_purpose.textColor = Color.white();
-  
-  return widget;
-}
-
-async function addAverage(widget, trips, selector, displayFunc) {
-  let data = [];
-  
-  for (let i = 0; i < trips.length; i++) {
-    let trip = trips[i];
-    let selectedVal = selector(trip);
-    data.push(selectedVal);
-  }
-
-  let average = avg(data);
-  
-  let t_average = widget.addText(displayFunc(average));
-  t_average.font = Font.regularSystemFont(12);
-  t_average.textColor = Color.white();
-  
-  return widget;
-}
-
-async function addPercentageByDuration(widget, trips, selector, displayFunc) {
-  let data = {};
-  
-  for (let i = 0; i < trips.length; i++) {
-    let trip = trips[i];
-    let duration = trip["train"]["duration"];
-    let seletedVal = selector(trip);
-    
-    if (!(seletedVal in data)) {
-      data[seletedVal] = duration;
-    } else {
-      data[seletedVal] += duration;
-    }
-  }
-  
-  let total = 0;
-  for (var i in data) { 
-      total += data[i];
-  }
-
-  let percentages = {};
-  for (var i in data) {
-    percentages[i] = (data[i] / total * 100);
-  }
-  
-  let t_percentage = widget.addText(displayFunc(percentages));
-  t_percentage.font = Font.regularSystemFont(12);
-  t_percentage.textColor = Color.white();
-  
-  return widget;
-}
-
-async function addRecordTrips(widget, title, trips, maxTrips=7, displayParameterFunc= (function() { return ""; })) {
+async function addTripsList(widget, title, trips, maxTrips=7, displayParameterFunc= (function() { return ""; })) {
   let t_title = widget.addText(title);
   t_title.font = Font.boldSystemFont(12);
   t_title.textColor  = Color.white();
@@ -1061,7 +1033,14 @@ function minutesToHoursMinutesString(totalMinutes) {
 }
 
 function sum(arr) {
-  if(!Array.isArray(arr)) return;
+  if(!Array.isArray(arr)) {
+    return 0;
+  }
+  
+  if(arr.length < 1) {
+    return 0;
+  }
+  
   return arr.reduce((a, v)=>a + v);
 }
 

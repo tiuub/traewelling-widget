@@ -13,7 +13,7 @@ Traewelling Widget is a iOS widget for [Scriptable](https://scriptable.app/), wh
 
  - Download [Scriptable](https://scriptable.app/) from the [App Store](https://apps.apple.com/de/app/scriptable/id1405459188)
  - Download the latest release [here](https://github.com/tiuub/traewelling-widget/releases/latest).
- - Copy the TraewellingWidget.js to your Scriptable folder in Files.
+ - Copy the TraewellingWidget.js to your Scriptable folder in Files (iCloud).
 
 
 ### Configure Widget
@@ -27,29 +27,43 @@ Traewelling Widget is a iOS widget for [Scriptable](https://scriptable.app/), wh
 ### Authorization
 
 - After configuration, the widget should state something like *this profile is unauthenticated*
-- Remember your profile you have set in the configuration and click on the widget
-- Follow the steps of the authorization flow
-- When the Scriptable App opens again, enter your profile and confirm with **Ok**
-- You should be authenticated now
+- Click on the widget and follow the steps of the authorization flow
+- When done, there should be a pop up window
 
-*(Hint: If you have configured a bigger timespan, f.e. more than 14 days in the past, the script might timeout a few times at first start. This should fix by itself. This happens due to iOS widget timeout limitations. It will work after the script has cached some statistics.)*
+*(Hint: If you have configured a big timespan, f.e. more than 14 days in the past, the script might timeout a few times on first start. This should fix by itself. This happens due to iOS widget timeout limitations. It will work after the script has cached some statistics.)*
 
 ## Configuration
 
-This is a bare minimum default configuration, you can use for your widget.
-The profile parameter is optional, but recommended. If not set, it will use **0** by default.
+If you want to use a custom configuration. You have to set your configuration as json in the widget parameters.
 
-*(The widget will then use the latest 14 days of your Traewelling data by default.)*
+- Long press your widget
+- Click **Edit Widget**
+- Paste your json in **Parameter**
 
+### Profile (Optional)
+
+The profile parameter is used to have multiple widget configurations for different traewelling accounts. 
+
+If not set, the default value is used.
+
+> Default: 0
+
+Usage:
 ```json
 {
-    "profile": "<profile>"
+    "profile": "my-second-profile"
 }
 ```
 
-### Default Configuration (Date Difference)
+### Days (Optional)
 
-If you want to see more than the latest 14 days of your Traewelling data, you can set these through the configuration. In this example, you will get the latest 28 days.
+The days parameter is used to analyze all statistics within the specified time range.
+
+If not set, the default value will be used.
+
+> Default: 14
+
+Usage:
 
 ```json
 {
@@ -57,9 +71,15 @@ If you want to see more than the latest 14 days of your Traewelling data, you ca
 }
 ```
 
-### Default Configuration (Specific Date)
+### Date (Optional)
 
-If you want to see all your Traewelling data to a specific date, you can set these through the configuration.
+The date parameter is utilized to examine all statistics up to the specified date.
+
+There is no default for the date parameter.
+
+> *Note: The date parameter will override the days parameter, if set.*
+
+Usage:
 
 ```json
 {
@@ -67,9 +87,15 @@ If you want to see all your Traewelling data to a specific date, you can set the
 }
 ```
 
-### Default Configuration (Custom Schemes)
+### Schemes
 
-If you want to use a custom scheme for your widget, you can set this through the configuration.
+If you want to use a custom scheme for your widget, you can set this through the schemes parameter in the configuration.
+
+If not set, the default value will be used.
+
+> Default: *see in script* 
+
+Usage:
 
 ```json
 {

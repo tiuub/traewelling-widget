@@ -9,18 +9,16 @@ export default class Cache {
     }
   }
 
-  async read(key, expirationMinutes) {
+  async read(key, expirationMinutes=2) {
     key = key.replace("https://", "").replace("http://", "").replace("www.", "").replaceAll('/', '_').replaceAll(':', '');
     try {
       const path = this.fileManager.joinPath(this.cachePath, key);
       await this.fileManager.downloadFileFromiCloud(path);
       const createdAt = this.fileManager.creationDate(path);
       
-      if (expirationMinutes) {
-        if ((new Date()) - createdAt > ((expirationMinutes) * 60000)) {
-          this.fileManager.remove(path);
-          return null;
-        }
+      if ((new Date()) - createdAt > ((expirationMinutes) * 60000)) {
+        this.fileManager.remove(path);
+        return null;
       }
       
       const value = this.fileManager.readString(path);
