@@ -828,15 +828,17 @@ async function addTrainCategory(widget, trips, category="express") {
 }
 
 async function addLatestTrips(widget, trips, maxTrips=7) {
-  trips.sort((a, b) => b.train.origin.departure - a.train.origin.departure);
+  let selector = trip => new Date(trip.train.origin.departure);
+  trips = await sortTripsBySelector(trips, selector, false);
   
   await addTripsList(widget, "Latest Trips", trips, maxTrips);
 }
 
 async function addFastestTrips(widget, trips, maxTrips=7) {
-  trips.sort((a, b) => calculateSpeedByMetersAndMinutes(b.train.distance, b.train.duration) - calculateSpeedByMetersAndMinutes(a.train.distance, a.train.duration));
-  
-  trips = trips.filter(trip => calculateSpeedByMetersAndMinutes(trip.train.distance, trip.train.duration) < MAX_SPEED);
+  let selector = trip => calculateSpeedByMetersAndMinutes(trip.train.distance, trip.train.duration);
+  trips = await sortTripsBySelector(trips, selector, false);
+
+  trips.filter(trip => calculateSpeedByMetersAndMinutes(trip.train.distance, trip.train.duration) < MAX_SPEED);
   
   let displayFunc = function(trip) { 
     return `(${numberWithCommas(calculateSpeedByMetersAndMinutes(trip.train.distance, trip.train.duration), 0)} km/h)`;
@@ -846,29 +848,33 @@ async function addFastestTrips(widget, trips, maxTrips=7) {
 }
 
 async function addSlowestTrips(widget, trips, maxTrips=7) {
-  trips.sort((a, b) => a.train.speed - b.train.speed);
-  
+  let selector = trip => calculateSpeedByMetersAndMinutes(trip.train.distance, trip.train.duration);
+  trips = await sortTripsBySelector(trips, selector);
+
   let displayFunc = function(trip) { 
-    return `(${numberWithCommas(trip.train.speed, 0)} km/h)`;
+    return `(${numberWithCommas(calculateSpeedByMetersAndMinutes(trip.train.distance, trip.train.duration), 0)} km/h)`;
   };
   
   await addTripsList(widget, "Slowest Trips", trips, maxTrips, displayFunc);
 }
 
 async function addLongestTrips(widget, trips, maxTrips=7) {
-  trips.sort((a, b) => b.train.distance - a.train.distance);
+  let selector = trip => trip.train.distance;
+  trips = await sortTripsBySelector(trips, selector, false);
   
   await addTripsList(widget, "Longest Trips", trips, maxTrips);
 }
 
 async function addShortestTrips(widget, trips, maxTrips=7) {
-  trips.sort((a, b) => a.train.distance - b.train.distance);
+  let selector = trip => trip.train.distance;
+  trips = await sortTripsBySelector(trips, selector);
   
   await addTripsList(widget, "Shortest Trips", trips, maxTrips);
 }
 
 async function addLongestTimeTrips(widget, trips, maxTrips=7) {
-  trips.sort((a, b) => b.train.duration - a.train.duration);
+  let selector = trip => trip.train.duration;
+  trips = await sortTripsBySelector(trips, selector, false);
   
   let displayFunc = function(trip) { 
     return `(${minutesToHoursMinutesString(trip.train.duration)})`;
@@ -878,7 +884,8 @@ async function addLongestTimeTrips(widget, trips, maxTrips=7) {
 }
 
 async function addShortestTimeTrips(widget, trips, maxTrips=7) {
-  trips.sort((a, b) => a.train.duration - b.train.duration);
+  let selector = trip => trip.train.distance;
+  trips = await sortTripsBySelector(trips, selector);
   
   let displayFunc = function(trip) { 
     return `(${minutesToHoursMinutesString(trip.train.duration)})`; 
@@ -888,10 +895,11 @@ async function addShortestTimeTrips(widget, trips, maxTrips=7) {
 }
 
 async function addHighestDelayTrips(widget, trips, maxTrips=7) {
-  trips.sort((a, b) => (new Date(b.train.destination.arrivalReal) -  new Date(b.train.destination.arrivalPlanned)) - (new Date(a.train.destination.arrivalReal) -  new Date(a.train.destination.arrivalPlanned)));
+  let selector = trip => (new Date(trip.train.destination.arrival) - new Date(trip.train.destination.arrivalPlanned));
+  trips = await sortTripsBySelector(trips, selector, false);
   
   let displayFunc = function(trip) { 
-    return `(${minutesToHoursMinutesString((new Date(trip.train.destination.arrivalReal) - new Date(trip.train.destination.arrivalPlanned)) / 60000)})`;
+    return `(${minutesToHoursMinutesString((new Date(trip.train.destination.arrival) - new Date(trip.train.destination.arrivalPlanned)) / 60000)})`;
   };
   
   await addTripsList(widget, "Highest Delay Trips", trips, maxTrips, displayFunc);

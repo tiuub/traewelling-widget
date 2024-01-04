@@ -8,6 +8,7 @@
 
 Traewelling Widget is a iOS widget for [Scriptable](https://scriptable.app/), which shows some stats about your logged train rides on [Traewelling](https://traewelling.de).
 
+![Preview](examples/2_cut.png)
 
 ## Installation
 
