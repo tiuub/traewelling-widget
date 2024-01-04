@@ -1,6 +1,6 @@
 {
   "name": "TraewellingWidget",
-  "version": "1.1.2",
+  "version": "1.1.3",
   "description": "An iOS widget for Scriptable, which shows your stats about your latest train rides checked in via Traewelling.",
   "main": "TraewellingWidget.js",
   "scripts": {
