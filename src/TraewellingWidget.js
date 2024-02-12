@@ -694,6 +694,19 @@ async function sortTripsBySelector(trips, selector, ascending=true) {
   return trips;
 }
 
+function calculateTripSpeed(trip, allowance=0.1) {
+  let realSpeed = calculateSpeedByMetersAndMinutes(trip.train.distance, trip.train.duration);
+  let theoreticalSpeed = calculateSpeedByMetersAndMinutes(trip.train.distance, (new Date(trip.train.destination.arrivalPlanned) - new Date(trip.train.origin.departurePlanned)) / 60000);
+
+  let adjustedSpeed = adjustValue(realSpeed, theoreticalSpeed, allowance, true, false);
+
+  return adjustedSpeed;
+}
+
+function calculateTripDelay(trip) {
+  return new Date(trip.train.destination.arrival) - new Date(trip.train.destination.arrivalPlanned);
+}
+
 async function addTrainDistance(widget, trips) {
   let selector = trip => trip.train.distance;
   let trainDistance = await summarizeTripsParameter(trips, selector);
@@ -739,7 +752,7 @@ async function addFavouriteConnection(widget, trips) {
 }
 
 async function addTrainDelay(widget, trips) {
-  let selector = trip => (new Date(trip.train.destination.arrival) - new Date(trip.train.destination.arrivalPlanned));
+  let selector = trip => calculateTripDelay(trip);
   let totalDelayInMs = await summarizeTripsParameter(trips, selector);
   let totalDelay = totalDelayInMs / 60000;
   let totalDelayHoursMinutes = toHoursAndMinutes(totalDelay);
@@ -750,13 +763,13 @@ async function addTrainDelay(widget, trips) {
 }
 
 async function addTrainMinSpeed(widget, trips) {
-  let selector = trip => calculateSpeedByMetersAndMinutes(trip.train.distance, trip.train.duration);
+  let selector = trip => calculateTripSpeed(trip);
   trips = await sortTripsBySelector(trips, selector);
   let trip = trips[0];
   let minSpeed = 0;
 
   if (trip) {
-    minSpeed = numberWithCommas(calculateSpeedByMetersAndMinutes(trip.train.distance, trip.train.duration), 0);
+    minSpeed = numberWithCommas(calculateTripSpeed(trip), 0);
   }
 
   widget = await addSingleStatistic(widget, `🚄 ${minSpeed} km/h (min)`);
@@ -765,13 +778,13 @@ async function addTrainMinSpeed(widget, trips) {
 }
 
 async function addTrainMaxSpeed(widget, trips) {
-  let selector = trip => calculateSpeedByMetersAndMinutes(trip.train.distance, trip.train.duration);
+  let selector = trip => calculateTripSpeed(trip);
   trips = await sortTripsBySelector(trips, selector, false);
   let trip = trips[0];
   let maxSpeed = 0;
   
   if (trip) {
-    maxSpeed = numberWithCommas(calculateSpeedByMetersAndMinutes(trip.train.distance, trip.train.duration), 0);
+    maxSpeed = numberWithCommas(calculateTripSpeed(trip), 0);
   }
 
   widget = await addSingleStatistic(widget, `🚄 ${maxSpeed} km/h (max)`);
@@ -780,7 +793,7 @@ async function addTrainMaxSpeed(widget, trips) {
 }
 
 async function addTrainAvgSpeed(widget, trips) {
-  let selector = trip => calculateSpeedByMetersAndMinutes(trip.train.distance, trip.train.duration);
+  let selector = trip => calculateTripSpeed(trip);
   let average = await avgTripsParameter(trips, selector);
   widget = await addSingleStatistic(widget, `🚄 ${numberWithCommas(average, 0)} km/h (avg)`)
 
@@ -835,24 +848,22 @@ async function addLatestTrips(widget, trips, maxTrips=7) {
 }
 
 async function addFastestTrips(widget, trips, maxTrips=7) {
-  let selector = trip => calculateSpeedByMetersAndMinutes(trip.train.distance, trip.train.duration);
+  let selector = trip => calculateTripSpeed(trip);
   trips = await sortTripsBySelector(trips, selector, false);
-
-  trips.filter(trip => calculateSpeedByMetersAndMinutes(trip.train.distance, trip.train.duration) < MAX_SPEED);
   
   let displayFunc = function(trip) { 
-    return `(${numberWithCommas(calculateSpeedByMetersAndMinutes(trip.train.distance, trip.train.duration), 0)} km/h)`;
+    return `(${numberWithCommas(calculateTripSpeed(trip), 0)} km/h)`;
   };
   
   await addTripsList(widget, "Fastest Trips", trips, maxTrips, displayFunc);
 }
 
 async function addSlowestTrips(widget, trips, maxTrips=7) {
-  let selector = trip => calculateSpeedByMetersAndMinutes(trip.train.distance, trip.train.duration);
+  let selector = trip => calculateTripSpeed(trip);
   trips = await sortTripsBySelector(trips, selector);
 
   let displayFunc = function(trip) { 
-    return `(${numberWithCommas(calculateSpeedByMetersAndMinutes(trip.train.distance, trip.train.duration), 0)} km/h)`;
+    return `(${numberWithCommas(calculateTripSpeed(trip), 0)} km/h)`;
   };
   
   await addTripsList(widget, "Slowest Trips", trips, maxTrips, displayFunc);
@@ -895,11 +906,11 @@ async function addShortestTimeTrips(widget, trips, maxTrips=7) {
 }
 
 async function addHighestDelayTrips(widget, trips, maxTrips=7) {
-  let selector = trip => (new Date(trip.train.destination.arrival) - new Date(trip.train.destination.arrivalPlanned));
+  let selector = trip => calculateTripDelay(trip);
   trips = await sortTripsBySelector(trips, selector, false);
   
   let displayFunc = function(trip) { 
-    return `(${minutesToHoursMinutesString((new Date(trip.train.destination.arrival) - new Date(trip.train.destination.arrivalPlanned)) / 60000)})`;
+    return `(${minutesToHoursMinutesString(calculateTripDelay(trip) / 60000)})`;
   };
   
   await addTripsList(widget, "Highest Delay Trips", trips, maxTrips, displayFunc);
@@ -1050,6 +1061,20 @@ function sum(arr) {
   }
   
   return arr.reduce((a, v)=>a + v);
+}
+
+function adjustValue(realValue, theoreticalValue, allowance=0.1, capUpwards=true, capDownwards=true) {
+  let allowanceRange = theoreticalValue * allowance;
+
+  if (realValue < theoreticalValue - allowanceRange && capDownwards) {
+    return Math.max(realValue, theoreticalValue - allowanceRange);
+  }
+
+  if (realValue > theoreticalValue + allowanceRange && capUpwards) {
+    return Math.min(realValue, theoreticalValue + allowanceRange);
+  }
+
+  return theoreticalValue;
 }
 
 function calculateSpeedByMetersAndMinutes(meters, minutes) {
