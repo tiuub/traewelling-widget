@@ -25,6 +25,7 @@ const FM = FileManager.iCloud();
 const ROOT = FM.documentsDirectory();
 const SCRIPTNAME = Script.name();
 const SCRIPTPATH = FM.joinPath(ROOT, SCRIPTNAME + ".js");
+const WORKINGDIR = FM.joinPath(ROOT, packageScriptName);
 const PROFILESDIR = FM.joinPath(WORKINGDIR, "profiles");
 const UPDATERDIR = FM.joinPath(WORKINGDIR, "updater");
 const queryParameters = args.queryParameters;
@@ -165,7 +166,7 @@ async function main() {
     if (buttonIndex === 1) {
       try {
         console.log("Updating script...");
-        await updater.updateScript(packageScriptName);
+        await updater.updateScript(SCRIPTNAME);
 
         let alert = new Alert();
         alert.title = "Traewelling Widget Update";
