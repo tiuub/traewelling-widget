@@ -22,7 +22,7 @@ Traewelling Widget is a iOS widget for [Scriptable](https://scriptable.app/), wh
  - Long press anywhere on your Homescreen and click on the **+**
  - Search for **Scriptable**, select the formfactor you want to have and place it wherever you want
  - Long press the widget and click on **Edit Widget**
- - Select **TraewellingWidget**, set *When interacting* to **Run Script** and paste your configuration JSON at **Parameter**. (For configuration, see below)
+ - Select **TraewellingWidget**, set *When interacting* to **Run Script** and paste your (optional) configuration JSON at **Parameter**. (For configuration, see below)
 
 
 ### Authorization
