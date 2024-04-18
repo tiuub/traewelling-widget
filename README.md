@@ -129,3 +129,18 @@ Examples:
 - ~~```TraewellingWidget 2.js```~~ to ```TraewellingWidget.js```
 
 The correct naming is important!
+
+
+# Previews
+
+<div style="display:flex">
+     <div style="flex:1;padding-right:20px;">
+          <img src="examples/1.png"/>
+     </div>
+     <div style="flex:1;padding-right:20px;">
+          <img src="examples/2.png"/>
+     </div>
+     <div style="flex:1">
+          <img src="examples/3.png"/>
+     </div>
+</div>
