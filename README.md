@@ -6,14 +6,14 @@
 ![GitHub Sponsors](https://img.shields.io/github/sponsors/tiuub)
 
 
-Traewelling Widget is a iOS widget for [Scriptable](https://scriptable.app/), which shows some stats about your logged train rides on [Traewelling](https://traewelling.de).
+Traewelling Widget is a iOS widget for [Scriptable](https://scriptable.app/), which shows some advanced statistics about your logged train rides on [Traewelling](https://traewelling.de) on your homescreen.
 
 ![Preview](examples/2_cut.png)
 
 ## Installation
 
  - Download [Scriptable](https://scriptable.app/) from the [App Store](https://apps.apple.com/de/app/scriptable/id1405459188)
- - Download the latest release [here](https://github.com/tiuub/traewelling-widget/releases/latest).
+ - Download the latest TraewellingWidget.js from releases [here](https://github.com/tiuub/traewelling-widget/releases/latest).
  - Copy the TraewellingWidget.js to your Scriptable folder in Files (iCloud).
 
 
