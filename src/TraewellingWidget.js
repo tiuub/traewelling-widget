@@ -4,7 +4,6 @@
 // GitHub - https://github.com/tiuub/traewelling-widget
 // License - Apache 2.0
 
-
 import Cache from './lib/cache';
 import Updater from './lib/updater';
 import { OAuth2Client } from './lib/customOauth';
@@ -12,18 +11,20 @@ import { Traewelling } from './lib/Traewelling';
 import States from './lib/states'
 
 import Package from '../package.json';
-const scriptVersion = Package.version;
-const sourceRepoPath = extractGitHubRepoPath(Package.repository.url);
-const sourceRepoUrl = `https://github.com/${sourceRepoPath}`
-const scriptName = Package.name;
-const scriptAuthor = Package.author;
-const scriptLicense = Package.license;
+const packageScriptVersion = Package.version;
+const packageSourceRepoPath = extractGitHubRepoPath(Package.repository.url);
+const packageSourceRepoUrl = `https://github.com/${packageSourceRepoPath}`
+const packageScriptName = Package.name;
+const packageScriptAuthor = Package.author;
+const packageScriptLicense = Package.license;
 
 // Helpers
+
 const today = new Date();
 const FM = FileManager.iCloud();
 const ROOT = FM.documentsDirectory();
-const WORKINGDIR = FM.joinPath(ROOT, Script.name());
+const SCRIPTNAME = Script.name();
+const SCRIPTPATH = FM.joinPath(ROOT, SCRIPTNAME + ".js");
 const PROFILESDIR = FM.joinPath(WORKINGDIR, "profiles");
 const UPDATERDIR = FM.joinPath(WORKINGDIR, "updater");
 const queryParameters = args.queryParameters;
@@ -39,6 +40,18 @@ const DEFAULT_SCHEMES = {
     [[["title", "noSpacer", "subtitle", "spacer", "distance", "spacer", "purposePersonal", "purposeCommute", "purposeBusiness"]]], 
     [[["title", "noSpacer", "subtitle", "spacer", "distance", "spacer", "duration", "maxSpeed", "avgSpeed"]]], 
     [[["title", "noSpacer", "subtitle", "spacer", "distance", "spacer", "categoryExpress", "categoryRegional", "categoryUrban"]]]], 
+  "medium": [
+    [
+      [["title", "noSpacer", "subtitle", "spacer", "distance", "spacer", "duration", "stations", "delay"], ["moreStats", "purposePersonal", "purposeCommute", "purposeBusiness", "spacer", "avgSpeed", "maxSpeed", "spacer", "favouriteStation", "favouriteConnection"]],
+    ], 
+    [
+      [["title", "noSpacer", "subtitle", "spacer", "distance", "spacer", "duration", "stations", "delay"], ["moreStats", "categoryExpress", "categoryRegional", "categoryUrban", "spacer", "purposePersonal", "purposeCommute", "purposeBusiness", "spacer", "favouriteStation"]], 
+
+    ], 
+    [
+      [["title", "noSpacer", "subtitle", "spacer", "distance", "spacer", "duration", "stations", "delay"], ["moreStats", "weekdayMonday", "weekdayTuesday", "weekdayWednesday", "weekdayThursday", "weekdayFriday", "spacer", "weekdaySaturday", "weekdaySunday"]],
+    ]
+  ],
   "large": [
     [
       [["title", "noSpacer", "subtitle", "spacer", "distance", "spacer", "duration", "stations", "delay"], ["moreStats", "purposePersonal", "purposeCommute", "purposeBusiness", "spacer", "avgSpeed", "maxSpeed", "spacer", "favouriteStation", "favouriteConnection"]], 
@@ -49,7 +62,8 @@ const DEFAULT_SCHEMES = {
       [["longestTrips"]]
     ], 
     [
-      [["title", "noSpacer", "subtitle", "spacer", "distance", "spacer", "duration", "stations", "delay"], ["moreStats", "weekdayMonday", "weekdayTuesday", "weekdayWednesday", "weekdayThursday", "weekdayFriday", "spacer", "weekdaySaturday", "weekdaySunday"]], [[{"name": "highestDelayTrips", "args": {"maxTrips": 3}}]], 
+      [["title", "noSpacer", "subtitle", "spacer", "distance", "spacer", "duration", "stations", "delay"], ["moreStats", "weekdayMonday", "weekdayTuesday", "weekdayWednesday", "weekdayThursday", "weekdayFriday", "spacer", "weekdaySaturday", "weekdaySunday"]], 
+      [[{"name": "highestDelayTrips", "args": {"maxTrips": 3}}]], 
       [[{"name": "fastestTrips", "args": {"maxTrips": 3}}]]
     ]
   ]
@@ -58,17 +72,16 @@ const DEFAULT_WIDGET_FAMILY = "large";
 
 
 const SPACING = 24;
-const MAX_SPEED = 450; // to identifie errors in dataset
 
 await main();
 
 async function main() {
 
-  console.log(scriptName);
-  console.log(`by ${scriptAuthor}`);
-  console.log(`Version: ${scriptVersion}`);
-  console.log(`License: ${scriptLicense}`);
-  console.log(`GitHub: ${sourceRepoUrl}`);
+  console.log(packageScriptName);
+  console.log(`by ${packageScriptAuthor}`);
+  console.log(`Version: ${packageScriptVersion}`);
+  console.log(`License: ${packageScriptLicense}`);
+  console.log(`GitHub: ${packageSourceRepoUrl}`);
   console.log("");
 
   // Make sure, the script runs in the right context
@@ -76,6 +89,29 @@ async function main() {
     console.log("The script is not meant to be run in this context.");
     Script.complete();
     return;
+  }
+
+  // Rename Script, if its not packageScriptName
+  if (config.runsInApp && SCRIPTNAME !== packageScriptName) {
+    console.log("Script name is incorrect. Needs to be renamed!");
+
+    let alert = new Alert();
+    alert.title = "Traewelling Widget Error"; 
+    alert.message = `Please rename the Script to ${packageScriptName}.js in Files!\n\nAfterwards you may have to reconfigure your script on homescreen!`;
+
+    alert.addAction("OK");
+
+    await alert.present();
+
+    Script.complete();
+    return;
+  } else if (config.runsInWidget && SCRIPTNAME !== packageScriptName) {
+    console.log("Script name is incorrect. Needs to be renamed!");
+    Script.setWidget(await getErrorWidget("Error! Wrong name for Script.\n\nClick for more information."));
+    Script.complete();
+    return;
+  } else if (SCRIPTNAME !== packageScriptName) {
+    throw Error("Wrong name of script!");
   }
 
   // Create working directory, if it not exist
@@ -103,13 +139,13 @@ async function main() {
   // Check for updates
   const updater = new Updater({
     fileManager: FM,
-    repo: sourceRepoPath,
+    repo: packageSourceRepoPath,
     cache: updaterCache,
   });
 
   var areRepoUpdatesAvailable = false;
   try {
-    areRepoUpdatesAvailable = await updater.checkForUpdate(scriptVersion);
+    areRepoUpdatesAvailable = await updater.checkForUpdate(packageScriptVersion);
   } catch (error) {
     console.log(`${error.line}: ${error.message}`);
   }
@@ -129,7 +165,7 @@ async function main() {
     if (buttonIndex === 1) {
       try {
         console.log("Updating script...");
-        await updater.updateScript(scriptName);
+        await updater.updateScript(packageScriptName);
 
         let alert = new Alert();
         alert.title = "Traewelling Widget Update";

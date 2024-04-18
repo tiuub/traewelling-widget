@@ -118,3 +118,14 @@ Usage:
 
 If you want to use a custom scheme for your widget, you can do so, by modifying the scheme in your configuration.
 
+## Troubleshooting
+
+### Wrong name of Script
+
+The correct naming of the script is important. Unless the script has the correct name, it wont work. Sometimes Safari or other browser will name downloaded files with increments, if they already exists in the downloads folder. Then you have to rename the downloaded script to ```TraewellingWidget.js```. 
+
+Examples:
+- ~~```TraewellingWidget (2).js```~~ to ```TraewellingWidget.js```
+- ~~```TraewellingWidget 2.js```~~ to ```TraewellingWidget.js```
+
+The correct naming is important!
